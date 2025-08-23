@@ -1,0 +1,27 @@
+# FastAPI and server dependencies
+fastapi==0.109.0
+uvicorn==0.27.0
+python-multipart==0.0.6
+pydantic==2.5.3
+
+# Database dependencies
+sqlalchemy==2.0.27
+asyncpg==0.29.0
+alembic==1.13.1
+
+# Data processing
+pandas==2.1.4
+numpy==1.26.3
+openpyxl==3.1.2
+
+# AI components
+google-generativeai==0.3.2
+langchain==0.1.5
+langchain-core==0.1.15
+llama-index-core==0.10.17
+llama-index-vector-stores-qdrant==0.10.16
+llama-index-embeddings-google-genai==0.1.4
+qdrant-client==1.7.0
+
+# Environment and utilities
+python-dotenv==1.0.0
