@@ -1,0 +1,251 @@
+# Database Schema for HR Bot CSV Upload System
+
+This document outlines the database schema used for storing the data uploaded through CSV files in the HR Bot system.
+
+## Tables and Relationships
+
+### 1. persons
+
+This table stores basic information about individuals (employees, faculty members).
+
+```sql
+CREATE TABLE persons (
+    id SERIAL PRIMARY KEY,
+    first_name VARCHAR(100) NOT NULL,
+    last_name VARCHAR(100) NOT NULL,
+    father_husband_name VARCHAR(100),
+    sex VARCHAR(20),
+    dob DATE,
+    cnic VARCHAR(20) UNIQUE,
+    cnic_expiry DATE,
+    phone VARCHAR(20),
+    email VARCHAR(100),
+    blood_group VARCHAR(10),
+    marital_status VARCHAR(20),
+    date_of_marriage DATE,
+    no_of_dependents INTEGER DEFAULT 0
+);
+```
+
+### 2. designations
+
+This table stores academic and administrative designations.
+
+```sql
+CREATE TYPE designation_type AS ENUM ('academic', 'administrative');
+
+CREATE TABLE designations (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(100) NOT NULL,
+    type designation_type NOT NULL,
+    description TEXT
+);
+```
+
+### 3. tracks
+
+This table defines the different faculty tracks (e.g., Research, Teaching).
+
+```sql
+CREATE TABLE tracks (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    description TEXT
+);
+```
+
+### 4. schools
+
+This table represents the schools or colleges within the university.
+
+```sql
+CREATE TABLE schools (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    code VARCHAR(20) UNIQUE,
+    description TEXT
+);
+```
+
+### 5. departments
+
+This table represents departments within schools.
+
+```sql
+CREATE TABLE departments (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    code VARCHAR(20) UNIQUE,
+    school_id INTEGER REFERENCES schools(id),
+    description TEXT
+);
+```
+
+### 6. faculty
+
+This table stores faculty-specific information, linked to a person.
+
+```sql
+CREATE TABLE faculty (
+    id SERIAL PRIMARY KEY,
+    person_id INTEGER NOT NULL REFERENCES persons(id),
+    code INTEGER UNIQUE,
+    title VARCHAR(100),
+    university_email VARCHAR(100),
+    designation_id INTEGER REFERENCES designations(id),
+    track_id INTEGER REFERENCES tracks(id),
+    department_id INTEGER REFERENCES departments(id),
+    school_id INTEGER REFERENCES schools(id),
+    status VARCHAR(50),
+    date_of_joining DATE
+);
+```
+
+### 7. qualifications
+
+This table stores educational qualifications of persons.
+
+```sql
+CREATE TABLE qualifications (
+    id SERIAL PRIMARY KEY,
+    person_id INTEGER NOT NULL REFERENCES persons(id),
+    degree VARCHAR(100),
+    field_of_study VARCHAR(100),
+    institution VARCHAR(200),
+    country VARCHAR(100),
+    year_completed INTEGER
+);
+```
+
+## Entity Relationship Diagram (ERD)
+
+```
++---------------+       +-------------------+
+|               |       |                   |
+|    persons    |------>|      faculty      |
+|               |       |                   |
++---------------+       +-------------------+
+       |                     |        |
+       |                     |        |
+       v                     |        |
++---------------+            |        |
+|               |            |        |
+| qualifications|            |        |
+|               |            |        |
++---------------+            |        |
+                             |        |
+                             v        v
+                      +---------------+
+                      |               |
+                      | designations  |
+                      |               |
+                      +---------------+
+                             
+                             |
+                             |
+                  +----------+----------+
+                  |                     |
+                  v                     v
+          +---------------+    +---------------+
+          |               |    |               |
+          |    tracks     |    |  departments  |
+          |               |    |               |
+          +---------------+    +---------------+
+                                      |
+                                      |
+                                      v
+                              +---------------+
+                              |               |
+                              |    schools    |
+                              |               |
+                              +---------------+
+```
+
+## Key Relationships
+
+1. **Person to Faculty**: One-to-One relationship
+   - A person record can have one faculty record (if they are faculty)
+   - Linked via `person_id` in the faculty table
+
+2. **Person to Qualifications**: One-to-Many relationship
+   - A person can have multiple qualifications
+   - Linked via `person_id` in the qualifications table
+
+3. **Faculty to Designation**: Many-to-One relationship
+   - Many faculty members can have the same designation
+   - Linked via `designation_id` in the faculty table
+
+4. **Faculty to Track**: Many-to-One relationship
+   - Many faculty members can be on the same track
+   - Linked via `track_id` in the faculty table
+
+5. **Faculty to Department**: Many-to-One relationship
+   - Many faculty members can belong to the same department
+   - Linked via `department_id` in the faculty table
+
+6. **Faculty to School**: Many-to-One relationship
+   - Many faculty members can belong to the same school
+   - Linked via `school_id` in the faculty table
+
+7. **Department to School**: Many-to-One relationship
+   - Many departments can belong to the same school
+   - Linked via `school_id` in the departments table
+
+## Indexes
+
+The following indexes are recommended for optimal performance:
+
+```sql
+-- Foreign key indexes
+CREATE INDEX idx_faculty_person_id ON faculty(person_id);
+CREATE INDEX idx_faculty_designation_id ON faculty(designation_id);
+CREATE INDEX idx_faculty_track_id ON faculty(track_id);
+CREATE INDEX idx_faculty_department_id ON faculty(department_id);
+CREATE INDEX idx_faculty_school_id ON faculty(school_id);
+CREATE INDEX idx_qualifications_person_id ON qualifications(person_id);
+CREATE INDEX idx_departments_school_id ON departments(school_id);
+
+-- Other frequently searched fields
+CREATE INDEX idx_persons_cnic ON persons(cnic);
+CREATE INDEX idx_faculty_code ON faculty(code);
+CREATE INDEX idx_persons_name ON persons(last_name, first_name);
+```
+
+## CSV Upload Flow to Database
+
+When a CSV file is uploaded, the system follows this process to populate the database:
+
+1. **Extract and Clean Person Data**:
+   - Parse person details from CSV
+   - Clean and validate data
+   - Create a record in the `persons` table
+
+2. **Extract and Clean Faculty Data**:
+   - Parse faculty details from CSV
+   - Clean and validate data
+   - Resolve or create `designation_id` based on Academic Designation
+   - Create a record in the `faculty` table linked to the person
+
+3. **Extract Qualifications** (if applicable):
+   - Parse qualification details from CSV
+   - Create records in the `qualifications` table linked to the person
+
+4. **Resolving References**:
+   - The system attempts to find existing designations, departments, schools, and tracks
+   - If they don't exist, they may be created (depending on system configuration)
+   - Some fields may be left as NULL if not provided or not resolved
+
+## Constraints and Data Integrity
+
+- `persons.cnic` is UNIQUE to ensure no duplicate entries
+- `faculty.code` is UNIQUE to ensure no duplicate faculty codes
+- `faculty.person_id` ensures a faculty record is always linked to a valid person
+- Foreign key constraints ensure data integrity across all relationships
+- Default values help maintain data consistency for optional fields
+
+## Notes on Scalability
+
+For large datasets, consider:
+- Partitioning the `persons` and `faculty` tables by date ranges or alphabetically
+- Adding additional indexes for specific query patterns
+- Implementing archiving strategies for historical data

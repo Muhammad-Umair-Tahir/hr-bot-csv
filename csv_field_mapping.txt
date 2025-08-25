@@ -1,0 +1,116 @@
+# CSV Field Mapping and Processing Documentation
+
+This document details how CSV/Excel files are processed by the HR bot system, including the expected fields, how they're transformed, and their final formats.
+
+## Original Input Fields vs. Processed Fields
+
+### Person Information
+
+| Original CSV Field              | Processed Field           | Data Type    | Notes                                                  |
+|---------------------------------|---------------------------|--------------|--------------------------------------------------------|
+| Employee Name                   | first_name, last_name     | String       | Split into two fields based on space                   |
+| Father's Name / Husband'sName   | father_husband_name       | String       |                                                        |
+| Sex                             | sex                       | String       | Default: 'N/A'                                         |
+| Date of Birth                   | dob                       | Date         | Standardized to YYYY-MM-DD format. Default: 1900-01-01 |
+| CNIC #                          | cnic                      | String       | Default: '0000000000000'                               |
+| CNIC Expiry Date                | cnic_expiry               | Date         | Standardized to YYYY-MM-DD format. Default: 1900-01-01 |
+| Mobile #                        | phone                     | String       | Default: '0000000000'                                  |
+| Email                           | email                     | String       | Default: 'N/A'                                         |
+| Blood Group                     | blood_group               | String       | Default: 'N/A'                                         |
+| Marital Status                  | marital_status            | String       | Default: 'N/A'                                         |
+| Date of Marriage                | date_of_marriage          | Date         | Standardized to YYYY-MM-DD format. Default: 1900-01-01 |
+| No Of Dependents                | no_of_dependents          | Integer      | Default: 0                                             |
+
+### Faculty Information
+
+| Original CSV Field              | Processed Field           | Data Type    | Notes                                                  |
+|---------------------------------|---------------------------|--------------|--------------------------------------------------------|
+| Code                            | code                      | Integer      | Converted to integer. Uses person_id as fallback       |
+| Title                           | title                     | String       | Default: 'Unknown' if missing                          |
+| Email                           | university_email          | String       | Default: 'N/A'                                         |
+| Academic Designation            | (used for designation_id) | -            | Used to look up or create designation record           |
+| Administrative Designation      | -                         | -            | Used for reference but not directly stored             |
+| Status                          | status                    | String       | Default: 'N/A'                                         |
+| Date of Joining                 | date_of_joining           | Date         | Standardized to YYYY-MM-DD format. Default: 1900-01-01 |
+
+## Data Cleaning Process
+
+### Person Data Cleaning
+1. Name splitting: Employee name is split into first_name and last_name
+2. Date standardization: All dates converted to YYYY-MM-DD format
+3. Email cleaning: Removes extra spaces, converts to lowercase
+4. Missing values: Filled with appropriate defaults
+5. Data validation: Ensures critical fields have values
+
+### Faculty Data Cleaning
+1. Code processing: Converted to integer, uses person_id as fallback
+2. Title cleaning: Ensures a value is present, defaults to 'Unknown'
+3. Email standardization: Removes extra spaces, converts to lowercase
+4. Date standardization: All dates converted to YYYY-MM-DD format
+
+### Designation Processing
+1. Academic designations: Used to look up or create designation records
+2. Administrative designations: Captured but not directly used in faculty record
+
+## Expected CSV Format
+
+For best results, your CSV or Excel file should include the following columns:
+- Employee Name
+- Father's Name / Husband'sName
+- Sex
+- Date of Birth
+- CNIC #
+- CNIC Expiry Date
+- Mobile #
+- Email
+- Blood Group
+- Marital Status
+- Date of Marriage
+- No Of Dependents
+- Code
+- Title
+- Academic Designation
+- Status
+- Date of Joining
+
+## Data Type Handling
+
+- **Dates**: Accepts various formats (DD/MM/YYYY, MM/DD/YYYY, YYYY-MM-DD) and standardizes to YYYY-MM-DD
+- **Numbers**: Converted to appropriate numeric types
+- **Strings**: Cleaned of extra whitespace, standardized casing as needed
+- **Missing Values**: Handled with appropriate defaults based on field requirements
+
+## Example of a Processed Record
+
+```python
+# Person Record
+{
+    'first_name': 'John',
+    'last_name': 'Doe',
+    'father_husband_name': 'James Doe',
+    'sex': 'Male',
+    'dob': '1980-05-15',
+    'cnic': '1234567890123',
+    'cnic_expiry': '2025-12-31',
+    'phone': '03001234567',
+    'email': 'john.doe@example.com',
+    'blood_group': 'O+',
+    'marital_status': 'Married',
+    'date_of_marriage': '2010-10-10',
+    'no_of_dependents': 2
+}
+
+# Faculty Record
+{
+    'code': 12345,
+    'title': 'Assistant Professor',
+    'university_email': 'john.doe@university.edu',
+    'designation_id': 3,  # References a designation record
+    'track_id': None,
+    'department_id': None,
+    'school_id': None,
+    'status': 'Active',
+    'date_of_joining': '2015-01-15',
+    'person_id': 42  # References the person record
+}
+```

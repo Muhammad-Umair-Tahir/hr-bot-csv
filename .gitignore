@@ -1,0 +1,5 @@
+.env
+*.pyc
+__pycache__/
+csv_upload_router.py
+db_schema.py
