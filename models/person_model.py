@@ -7,7 +7,7 @@ from datetime import datetime
 Base = declarative_base()
 
 class Person(Base):
-    __tablename__ = "persons"
+    __tablename__ = "person"
     
     id = Column(Integer, primary_key=True, index=True)
     first_name = Column(String(100), nullable=False)
