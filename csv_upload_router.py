@@ -69,7 +69,7 @@ async def get_all_faculty(session: AsyncSession = Depends(get_db_session)):
     faculty_list = result.scalars().all()
     return faculty_list
 
-@router.post("/upload-csv/", status_code=status.HTTP_201_CREATED)
+@router.post("/upload-csv", status_code=status.HTTP_201_CREATED)
 async def upload_csv(
     file: UploadFile = File(...),
     session: AsyncSession = Depends(get_db_session)
