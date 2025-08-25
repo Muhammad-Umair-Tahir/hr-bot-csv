@@ -6,7 +6,7 @@ from datetime import datetime
 from models.person_model import Base
 
 class Department(Base):
-    __tablename__ = "departments"
+    __tablename__ = "department"
     
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
