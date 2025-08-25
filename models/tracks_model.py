@@ -6,7 +6,7 @@ from datetime import datetime
 from models.person_model import Base
 
 class Track(Base):
-    __tablename__ = "tracks"
+    __tablename__ = "track"
     
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
