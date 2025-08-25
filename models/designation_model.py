@@ -9,7 +9,7 @@ class DesignationType(enum.Enum):
     administrative = "administrative"
 
 class Designation(Base):
-    __tablename__ = "designations"
+    __tablename__ = "designation"
     
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(100), nullable=False)
