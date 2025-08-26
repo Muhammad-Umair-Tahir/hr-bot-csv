@@ -9,7 +9,7 @@ class Faculty(Base):
     __tablename__ = "faculty"
     
     id = Column(Integer, primary_key=True, index=True)
-    person_id = Column(Integer, ForeignKey("persons.id"), nullable=False)
+    person_id = Column(Integer, ForeignKey("person.id"), nullable=False)
     code = Column(Integer, unique=True)
     title = Column(String(100))
     university_email = Column(String(100))
