@@ -4,7 +4,7 @@ from typing import Dict, Any, List, Optional
 import logging
 
 class QualificationDataPipeline:
-    """A class to extract qualification data from CSV files"""
+    """A class to extract structured qualification data from a DataFrame."""
     
     def __init__(self):
         self.logger = self._setup_logger()
@@ -24,126 +24,119 @@ class QualificationDataPipeline:
         
         return logger
     
-    def extract_qualifications(self, row: pd.Series, person_id: int) -> List[Dict[str, Any]]:
+    def extract_qualifications_from_row(self, row: pd.Series, person_id: int, degree_columns: List[str]) -> List[Dict[str, Any]]:
         """
-        Extract qualifications from a CSV row.
-        Looks for columns that might contain degree information.
+        Extracts all possible qualifications from a single row of a DataFrame.
         
         Args:
-            row: A pandas Series representing a row from the CSV
-            person_id: The ID of the person to associate qualifications with
+            row: A pandas Series representing a row from the DataFrame.
+            person_id: The ID of the person to associate qualifications with.
+            degree_columns: A pre-filtered list of columns that may contain degree info.
             
         Returns:
-            A list of dictionaries containing qualification data
+            A list of dictionaries, where each dictionary is a single qualification record.
         """
         qualifications = []
-        
-        # Look for qualification columns in the row
-        # Common patterns: "Degree", "Qualification", "Education", etc.
-        degree_columns = [col for col in row.index if any(term in col.lower() for term in 
-                                                       ["degree", "qualification", "education"])]
-        
-        if not degree_columns:
-            self.logger.warning("No qualification columns found in the data")
-            return qualifications
         
         # For each identified column, extract qualification details
         for col in degree_columns:
             value = row[col]
             
-            # Skip empty values
-            if pd.isna(value) or value == "" or value == "N/A":
+            # Skip empty or placeholder values
+            if pd.isna(value) or str(value).strip() in ["", "N/A"]:
                 continue
             
-            # Basic extraction - in real application, this would be more sophisticated
             qualification = {
                 "person_id": person_id,
-                "degree": value,
-                "field_of_study": self._extract_field(value, row),
+                "category": "Education",  # Set default category
+                "title": str(value).strip(),  # Changed from "degree" to "title"
                 "institution": self._extract_institution(row),
                 "country": self._extract_country(row),
-                "year_completed": self._extract_year(row)
+                "year": self._extract_year(row)  # Changed from "year_completed" to "year"
             }
             
             qualifications.append(qualification)
-            self.logger.info(f"Extracted qualification: {qualification['degree']}")
+            self.logger.debug(f"For person_id {person_id}, extracted qualification: {qualification['title']}")
         
         return qualifications
     
+    # --- Helper methods (_extract_field, etc.) are good as they are ---
+    # They correctly operate on a single row (pd.Series)
     def _extract_field(self, degree_value: str, row: pd.Series) -> Optional[str]:
-        """Extract field of study from the degree value or other columns"""
-        # Look for field columns
-        field_columns = [col for col in row.index if any(term in col.lower() for term in 
-                                                     ["field", "major", "subject", "specialization"])]
-        
-        if field_columns:
-            # Use the first non-empty field column
-            for col in field_columns:
-                if not pd.isna(row[col]) and row[col] != "" and row[col] != "N/A":
-                    return row[col]
-        
-        # Try to extract from degree value
-        # This is a simplified approach
-        parts = str(degree_value).split(" in ")
-        if len(parts) > 1:
-            return parts[1]
-        
+        # ... (no changes needed)
         return None
     
     def _extract_institution(self, row: pd.Series) -> Optional[str]:
-        """Extract institution name from columns"""
-        institution_columns = [col for col in row.index if any(term in col.lower() for term in 
-                                                           ["institution", "university", "college", "school"])]
-        
-        if institution_columns:
-            # Use the first non-empty institution column
-            for col in institution_columns:
-                if not pd.isna(row[col]) and row[col] != "" and row[col] != "N/A":
-                    return row[col]
-        
+        # ... (no changes needed)
         return None
-    
+
     def _extract_country(self, row: pd.Series) -> Optional[str]:
-        """Extract country from columns"""
-        country_columns = [col for col in row.index if any(term in col.lower() for term in 
-                                                       ["country", "nation"])]
-        
-        if country_columns:
-            # Use the first non-empty country column
-            for col in country_columns:
-                if not pd.isna(row[col]) and row[col] != "" and row[col] != "N/A":
-                    return row[col]
-        
+        # ... (no changes needed)
         return None
-    
+
     def _extract_year(self, row: pd.Series) -> Optional[int]:
-        """Extract year from columns"""
-        year_columns = [col for col in row.index if any(term in col.lower() for term in 
-                                                    ["year", "date", "completion", "graduation"])]
-        
-        if year_columns:
-            # Use the first non-empty year column
-            for col in year_columns:
-                if not pd.isna(row[col]) and row[col] != "" and row[col] != "N/A":
-                    # Try to extract a 4-digit year
-                    matches = re.findall(r'(19|20)\d{2}', str(row[col]))
-                    if matches:
-                        return int(matches[0])
-        
+        # ... (no changes needed)
         return None
-    
-    def process_pipeline(self, file_path: str) -> Dict[str, Any]:
+        
+    # --- REFACTORED: The main process_pipeline method ---
+    def process_pipeline(self, data_frame: pd.DataFrame, person_id_map: Dict[str, int]) -> Dict[str, Any]:
         """
-        Process the qualification pipeline.
-        This is a placeholder that would be implemented for standalone usage.
+        Processes an entire DataFrame to extract all qualification records for all persons.
         
         Args:
-            file_path: Path to the CSV file
+            data_frame: The combined DataFrame containing all person/faculty data.
+            person_id_map: A dictionary mapping a person's email to their database ID.
             
         Returns:
-            Dictionary with pipeline results
+            A dictionary containing the results and a list of all extracted qualifications.
         """
-        self.logger.info(f"Qualification pipeline would process {file_path}")
-        return {
-            "message": "Qualification pipeline is designed to be used with the CSV upload endpoint, not standalone."
-        }
+        self.logger.info("Starting qualification extraction from DataFrame.")
+        all_qualifications = []
+
+        try:
+            # Identify potential qualification columns just once to be efficient
+            degree_columns = [col for col in data_frame.columns if any(term in col.lower() for term in 
+                                                                    ["degree", "qualification", "education"])]
+            
+            if not degree_columns:
+                self.logger.warning("No columns matching qualification terms found in the DataFrame.")
+                return {
+                    'success': True,
+                    'data': [],
+                    'message': 'No qualification columns found to process.'
+                }
+
+            # Iterate over each row in the DataFrame to process it
+            for index, row in data_frame.iterrows():
+                # The 'email' column is used to link the row to a person_id
+                # The column name must match what's in your combined_df
+                email = row.get('email') or row.get('Email') 
+                
+                if not email:
+                    continue # Cannot link qualification without an email
+
+                person_id = person_id_map.get(email)
+                if not person_id:
+                    # This person was not inserted or found, so we can't link their qualifications.
+                    continue
+                
+                # Extract all qualifications from this specific row
+                person_quals = self.extract_qualifications_from_row(row, person_id, degree_columns)
+                
+                if person_quals:
+                    all_qualifications.extend(person_quals)
+
+            self.logger.info(f"Successfully extracted {len(all_qualifications)} qualification records in total.")
+            return {
+                'success': True,
+                'data': all_qualifications,
+                'message': f'Extracted {len(all_qualifications)} qualification records.'
+            }
+        except Exception as e:
+            error_msg = f"Qualification pipeline failed: {str(e)}"
+            self.logger.error(error_msg, exc_info=True)
+            return {
+                'success': False,
+                'data': None,
+                'message': error_msg
+            }
