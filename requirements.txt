@@ -25,3 +25,7 @@ qdrant-client
 
 # Environment and utilities
 python-dotenv
+cryptography
+pyjwt
+passlib
+bcrypt
