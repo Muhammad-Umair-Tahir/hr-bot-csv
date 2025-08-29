@@ -4,7 +4,6 @@ from .academic_year_model import AcademicYear
 from .semester_model import Semester
 from .experience_model import Experience
 ## User model import removed
-from .designation_model import Designation
 from .faculty_model import Faculty
 from .faculty_contract_model import FacultyContract
 from .faculty_transfer_model import FacultyTransfer

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from sqlalchemy import Integer, String, ForeignKey, Boolean, DateTime, Enum as SqlEnum
+from sqlalchemy import Integer, String, ForeignKey, Boolean, DateTime, Enum as SqlEnum, Date
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from enum import Enum
 import datetime
@@ -7,7 +7,6 @@ from models.base_model import Base
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .designation_model import Designation
     from .tracks_model import Track
     from .track_level import TrackLevel
     from .department_model import Department
@@ -33,15 +32,18 @@ class Faculty(Base):
     title: Mapped[str] = mapped_column(String(100), nullable=False)
     university_email: Mapped[str] = mapped_column(String(100), unique=True, nullable=True)
 
-    designation_id: Mapped[int] = mapped_column(ForeignKey("designation.id", ondelete="SET NULL"), nullable=True)
     track_id: Mapped[int] = mapped_column(ForeignKey("track.id", ondelete="SET NULL"), nullable=True)
     track_level_id: Mapped[int] = mapped_column(ForeignKey("track_level.id", ondelete="SET NULL"), nullable=True)
 
     status: Mapped[str] = mapped_column(String(20), nullable=False)
+    academic_designation: Mapped[str] = mapped_column(String(100), nullable=True)
+    administrative_designation: Mapped[str] = mapped_column(String(100), nullable=True)
     person_id: Mapped[int] = mapped_column(ForeignKey("person.id", ondelete="CASCADE"), nullable=False)
     department_id: Mapped[int] = mapped_column(ForeignKey("department.id", ondelete="SET NULL"), nullable=True)
     school_id: Mapped[int] = mapped_column(ForeignKey("school.id", ondelete="SET NULL"), nullable=True)
-    date_of_joining: Mapped[str] = mapped_column(String(20), nullable=False)
+    date_of_joining: Mapped[datetime.date] = mapped_column(Date, nullable=False)
+    teaching_experience: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    professional_experience: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     # Authentication fields (merged User functionality)
     username: Mapped[str] = mapped_column(String(100), unique=True, nullable=True)
@@ -53,7 +55,6 @@ class Faculty(Base):
 
     # 🔗 Relationships
     person: Mapped["Person"] = relationship(back_populates="faculty")
-    designation: Mapped["Designation"] = relationship(back_populates="faculties")
     track: Mapped["Track"] = relationship(back_populates="faculties")
     track_level: Mapped["TrackLevel"] = relationship(back_populates="faculties")
 

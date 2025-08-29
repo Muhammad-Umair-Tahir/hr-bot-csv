@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database.connect import get_db_session, init_db, close_db
 from bot.router import router as hr_router
 from csv_upload_router import router as csv_router
+from track_selection.router import router as track_router
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -35,6 +36,7 @@ app.add_middleware(
 # Include routers
 app.include_router(hr_router)
 app.include_router(csv_router)
+app.include_router(track_router)
 
 @app.get("/")
 async def root():

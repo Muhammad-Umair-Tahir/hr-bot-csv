@@ -1,194 +1,183 @@
 import pandas as pd
-import re
-from datetime import datetime
-from typing import Dict, Any, Optional, List
-import logging
+import numpy as np
 
-class PersonDataPipeline:
+# --- 1. USER CONFIGURATION: PLEASE EDIT THESE VALUES ---
+
+# Specify the full path to your input Excel file
+# The 'r' before the string is important for Windows paths.
+input_excel_file = r'D:\Projects\OHCM-HR\Data\Faculty Details UMT.xlsx' 
+
+# Specify the name for the final output CSV file
+output_csv_file = 'cleaned_faculty_data_final.csv'
+
+
+# --- 2. SCRIPT LOGIC (No changes needed below unless warnings appear) ---
+
+def process_qualifications(df, id_vars, qual_map, category_name):
+    """Helper function to process one set of qualification columns."""
+    
+    current_id_vars = [col for col in id_vars if col in df.columns]
+
+    original_title_col = qual_map.get('original_title')
+    if not original_title_col or original_title_col not in df.columns:
+        return None
+        
+    original_qual_cols = [qual_map.get(k) for k in ['original_title', 'original_institution', 'original_country', 'original_year'] if qual_map.get(k) in df.columns]
+    
+    if original_title_col not in original_qual_cols:
+        return None
+
+    subset_df = df[current_id_vars + original_qual_cols].copy()
+    
+    temp_rename_map = {
+        qual_map.get('original_title'): 'qualification_title_temp',
+        qual_map.get('original_institution'): 'institution_temp',
+        qual_map.get('original_country'): 'country_temp',
+        qual_map.get('original_year'): 'year_temp'
+    }
+    subset_df.rename(columns={k: v for k, v in temp_rename_map.items() if k}, inplace=True)
+
+    subset_df['Category (Educational, Professional)'] = category_name
+    subset_df.dropna(subset=['qualification_title_temp'], inplace=True)
+    
+    return subset_df
+
+
+def clean_and_transform_data(input_file, output_file):
     """
-    A comprehensive data cleaning pipeline for person details.
-    Processes a raw DataFrame and prepares it for database insertion.
+    Reads a wide-format Excel file, transforms it into a long format with one row
+    per qualification, cleans the data, and saves it to a CSV file.
     """
+    try:
+        df = pd.read_excel(input_file)
+        print("Successfully read the Excel file.")
+    except FileNotFoundError:
+        print(f"Error: The file '{input_file}' was not found. Please check the file name and path.")
+        return
+    except Exception as e:
+        print(f"An error occurred while reading the Excel file: {e}")
+        return
+
+    # Define the expected column names from your Excel file.
+    # This list contains corrections for common typos.
+    id_vars_expected = [
+        'Title', 'Code', 'Email', 'Academic Designation', 'Administrative Designation', 'Status',
+        'Date of Joining', 'Teaching Experience at Joining', 'Professional Experience at joining',
+        'Employee Name', "Father's Name / Husband'sName", # Using standard apostrophe
+        'Sex', 'Date of Birth', 'Mobile #', 'Email 2', 'CNIC #', 'CNIC Expiry Date', 'Marital Status', 
+        'Blood Group', 'Date of Marriage', 'No Of Dependents' # Corrected to plural 'Dependents'
+    ]
     
-    def __init__(self):
-        self.logger = self._setup_logger()
-        
-        # Column mapping configuration from raw file to intermediate names
-        self.column_mapping = {
-            'Employee Name': 'Employee Name',
-            "Father's Name / Husband'sName": "Father's Name / Husband'sName",
-            'Sex': 'Sex',
-            'Email': 'Email',
-            'CNIC #': 'CNIC #',
-            'CNIC Expiry Date': 'CNIC Expiry Date',
-            'Date of Birth': 'Date of Birth',
-            'Mobile #': 'Mobile #',
-            'Blood Group': 'Blood Group',
-            'Marital Status': 'Marital Status',
-            'No Of Dependents': 'No Of Dependents',
-            'Date of Marriage': 'Date of Marriage'
-        }
-        
-        # Final column names for the output DataFrame
-        self.final_column_mapping = {
-            'First Name': 'First name',
-            'Last Name': 'Last name',
-            "Father's Name / Husband'sName": 'Father/Husband name',
-            'Sex': 'Sex',
-            'Date of Birth': 'DoB',
-            'CNIC #': 'CNIC',
-            'CNIC Expiry Date': 'CNIC Expiry',
-            'Mobile #': 'Mobile',
-            'Email': 'Email',
-            'Blood Group': 'Blood Gorup',
-            'Marital Status': 'Martial Status',
-            'Date of Marriage': 'DoM',
-            'No Of Dependents': 'No. of Dependendts'
-        }
-        
-        # Default values for missing data
-        self.fill_defaults = {
-            'Sex': 'N/A', 'Email': 'N/A', 'Blood Gorup': 'N/A', 'Martial Status': 'N/A',
-            'Mobile': '0000000000', 'CNIC': '0000000000000', 'First name': 'N/A',
-            'Last name': 'N/A', 'Father/Husband name': 'N/A', 'DoB': '1900-01-01',
-            'DoM': '1900-01-01', 'CNIC Expiry': '1900-01-01', 'No. of Dependendts': 0
-        }
+    # --- DIAGNOSTIC CHECK ---
+    # This code checks if any of the expected columns are missing from your file.
+    actual_columns = df.columns
+    missing_columns = [col for col in id_vars_expected if col not in actual_columns]
     
-    def _setup_logger(self) -> logging.Logger:
-        # This method is good, no changes needed.
-        logger = logging.getLogger('PersonDataPipeline')
-        logger.setLevel(logging.INFO)
-        if not logger.handlers:
-            handler = logging.StreamHandler()
-            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-            handler.setFormatter(formatter)
-            logger.addHandler(handler)
-        return logger
+    if missing_columns:
+        print("\n--- WARNING: The following columns were not found in your Excel file ---")
+        for col in missing_columns:
+            print(f"- '{col}'")
+        print("--------------------------------------------------------------------------")
+        print("Please check for typos or extra spaces in these column names in your Excel file or in the 'id_vars_expected' list in the script.\n")
+
+    # The script will only use the columns that it actually finds.
+    id_vars = [var for var in id_vars_expected if var in actual_columns]
+
+    # Defines the qualification columns to search for. Adjust if pandas renames duplicates (e.g., 'Year 1.1')
+    qualification_sets = [
+        ( {'original_title': 'Qualification 1', 'original_institution': 'University 1', 'original_country': 'Country 1', 'original_year': 'Year 1'}, 'Educational' ),
+        ( {'original_title': 'Qualification 2', 'original_institution': 'University 2', 'original_country': 'Country 2', 'original_year': 'Year 2'}, 'Educational' ),
+        ( {'original_title': 'Qualification 3', 'original_institution': 'University 3', 'original_country': 'Country 3', 'original_year': 'Year 3'}, 'Educational' ),
+        ( {'original_title': 'Professional Qualification 1', 'original_institution': 'University/Institute 1', 'original_country': 'Country 1.1', 'original_year': 'Year 1.1'}, 'Professional' ),
+        ( {'original_title': 'Professional Qualification 2', 'original_institution': 'University/Institute 2', 'original_country': 'Country 2.1', 'original_year': 'Year 2.1'}, 'Professional' )
+    ]
+
+    all_quals_dfs = []
+    print("Transforming data from wide to long format...")
+    for qual_map, category_name in qualification_sets:
+        processed_df = process_qualifications(df, id_vars, qual_map, category_name)
+        if processed_df is not None and not processed_df.empty:
+            all_quals_dfs.append(processed_df)
     
-    # --- REMOVED ---
-    # The load_data method has been removed. The FastAPI router now handles
-    # reading the file into a DataFrame, which is then passed to this pipeline.
-    # def load_data(self, file_path: str, ...):
-    #     ...
+    if not all_quals_dfs:
+        print("Error: No qualification data could be processed. Please check your qualification column names.")
+        return
 
-    # --- All internal helper methods are excellent and require no changes ---
-    # They are already designed to operate on a DataFrame or its rows/values.
-    def extract_person_columns(self, df: pd.DataFrame) -> pd.DataFrame:
-        # ... (code is good)
-        try:
-            available_columns = [col for col in self.column_mapping.keys() if col in df.columns]
-            if not available_columns:
-                raise ValueError("No matching person columns found in the data")
-            person_data = df[available_columns].copy()
-            self.logger.info(f"Extracted {len(available_columns)} person columns")
-            return person_data
-        except Exception as e:
-            self.logger.error(f"Error extracting person columns: {str(e)}")
-            raise
+    final_df = pd.concat(all_quals_dfs, ignore_index=True, sort=False)
+    print("Transformation complete.")
+    
+    print("Applying pre-processing and data type conversions...")
 
-    def split_name(self, name):
-        # ... (code is good)
-        if pd.isnull(name):
-            return pd.Series({'First Name': None, 'Last Name': None})
-        parts = str(name).strip().split()
-        if len(parts) == 0:
-            return pd.Series({'First Name': None, 'Last Name': None})
-        elif len(parts) == 1:
-            return pd.Series({'First Name': parts[0], 'Last Name': 'N/A'})
-        else:
-            return pd.Series({'First Name': ' '.join(parts[:-1]), 'Last Name': parts[-1]})
-            
-    # ... all other cleaning methods (clean_email, process_dates, etc.) are also fine ...
-    def clean_email(self, email: str) -> str:
-        if pd.isnull(email): return None
-        parts = [e.strip().lower() for e in re.split(r'[;,/]', str(email)) if e.strip()]
-        return ', '.join(parts) if parts else None
+    # Renames all found columns to your desired final names.
+    final_rename_map = {
+        'Title': 'Faculty Title', 'Email': 'University Email', 'Date of Joining': 'Date of Joining',
+        'Teaching Experience at Joining': 'Teaching Experience', 'Professional Experience at joining': 'Professional Experience',
+        'Employee Name': 'Full Name', "Father's Name / Husband'sName": 'Father/Husband Name',
+        'Sex': 'Sex', 'Date of Birth': 'Date of Birth', 'Mobile #': 'Phone Number',
+        'Email 2': 'Personal Email', 'CNIC #': 'CNIC', 'CNIC Expiry Date': 'CNIC Expiry',
+        'Marital Status': 'Martial Status', 'Blood Group': 'Blood Group',
+        'Date of Marriage': 'Date of Marriage', 'No Of Dependents': 'No Of Dependent',
+        'Academic Designation': 'Academic Designation', 'Administrative Designation': 'Administrative Designation',
+        'Status': 'Status', 'qualification_title_temp': 'Qualification Title',
+        'institution_temp': 'Institution', 'country_temp': 'Country', 'year_temp': 'Year'
+    }
+    final_df.rename(columns=final_rename_map, inplace=True)
 
-    def clean_date(self, date_str: str) -> str:
-        if pd.isnull(date_str): return None
-        try:
-            dt = pd.to_datetime(str(date_str), errors='coerce', dayfirst=True)
-            return dt.strftime('%Y-%m-%d') if not pd.isnull(dt) else None
-        except Exception: return None
+    if 'Full Name' in final_df.columns:
+        name_parts = final_df['Full Name'].astype(str).str.split(' ', n=1, expand=True)
+        final_df['First Name'] = name_parts[0]
+        final_df['Last Name'] = name_parts[1]
+        final_df.drop(columns=['Full Name'], inplace=True)
+    else:
+        final_df['First Name'] = ''
+        final_df['Last Name'] = ''
 
-    def process_names(self, df: pd.DataFrame) -> pd.DataFrame:
-        if 'Employee Name' in df.columns:
-            name_splits = df['Employee Name'].apply(self.split_name)
-            df[['First Name', 'Last Name']] = name_splits
-            df = df.drop(columns=['Employee Name'])
-            self.logger.info("Successfully split employee names")
-        return df
+    # --- DATA TYPES AND NULLS SECTION ---
 
-    def process_emails(self, df: pd.DataFrame) -> pd.DataFrame:
-        if 'Email' in df.columns:
-            df['Email'] = df['Email'].apply(self.clean_email)
-        return df
+    date_columns = ['Date of Joining', 'Date of Birth', 'CNIC Expiry', 'Date of Marriage']
+    for col in date_columns:
+        if col in final_df.columns:
+            final_df[col] = pd.to_datetime(final_df[col], errors='coerce').dt.strftime('%Y-%m-%d').replace('NaT', '')
 
-    def process_dates(self, df: pd.DataFrame) -> pd.DataFrame:
-        date_columns = ['Date of Birth', 'Date of Marriage', 'CNIC Expiry Date']
-        for col in date_columns:
-            if col in df.columns:
-                df[col] = df[col].apply(self.clean_date)
-        return df
+    experience_columns = ['Teaching Experience', 'Professional Experience', 'Code']
+    for col in experience_columns:
+        if col in final_df.columns:
+            final_df[col] = pd.to_numeric(final_df[col], errors='coerce').fillna(0).astype(int)
 
-    def process_numeric_columns(self, df: pd.DataFrame) -> pd.DataFrame:
-        if 'No Of Dependents' in df.columns:
-            df['No Of Dependents'] = pd.to_numeric(df['No Of Dependents'], errors='coerce').fillna(0).astype(int)
-        return df
+    other_numeric_cols = ['No Of Dependent', 'Year']
+    for col in other_numeric_cols:
+        if col in final_df.columns:
+            final_df[col] = pd.to_numeric(final_df[col], errors='coerce').astype('Int64')
 
-    def reorder_and_rename_columns(self, df: pd.DataFrame) -> pd.DataFrame:
-        df = df.rename(columns=self.final_column_mapping)
-        return df
+    # Cleans all remaining text-based columns, ensuring 'Code' is treated as text.
+    for col in final_df.select_dtypes(include=['object']).columns:
+        final_df[col] = final_df[col].astype(str).str.strip().replace('nan', '')
 
-    def fill_missing_values(self, df: pd.DataFrame) -> pd.DataFrame:
-        df = df.fillna(value=self.fill_defaults)
-        return df
+    print("Data cleaning complete.")
 
-    def validate_data(self, df: pd.DataFrame) -> Dict[str, Any]:
-        # ... (code is good)
-        return {} # Placeholder for brevity
+    # --- FINALIZE AND SAVE CSV ---
+    
+    # This list defines the exact order of columns in your final CSV file.
+    final_columns_order = [
+        'Faculty Title', 'Code', 'First Name', 'Last Name', 'Father/Husband Name', 'Sex', 
+        'Date of Birth', 'Phone Number', 'Personal Email', 'CNIC', 'CNIC Expiry',
+        'Martial Status', 'University Email', 'Academic Designation', 
+        'Administrative Designation', 'Status', 'Date of Joining',
+        'Teaching Experience', 'Professional Experience',
+        'Blood Group', 'Date of Marriage',
+        'No Of Dependent', 'Category (Educational, Professional)', 'Qualification Title', 'Institution', 'Country', 'Year'
+    ]
+    
+    # The script will only include columns that actually exist after processing.
+    existing_final_columns = [col for col in final_columns_order if col in final_df.columns]
+    final_df = final_df[existing_final_columns]
+    
+    try:
+        final_df.to_csv(output_file, index=False, encoding='utf-8')
+        print(f"Successfully created the cleaned CSV file: '{output_file}'")
+    except Exception as e:
+        print(f"An error occurred while saving the file: {e}")
 
-    # --- REFACTORED: The main process_pipeline method ---
-    def process_pipeline(self, data_frame: pd.DataFrame) -> Dict[str, Any]:
-        """
-        Runs the complete data cleaning pipeline on a provided DataFrame.
-        
-        Args:
-            data_frame: The raw DataFrame to be processed.
-            
-        Returns:
-            A dictionary with the processed DataFrame, validation report, and success status.
-        """
-        try:
-            self.logger.info("Starting person data cleaning pipeline on provided DataFrame.")
-            
-            # The DataFrame is now passed in directly.
-            df = data_frame
-            
-            df = self.extract_person_columns(df)
-            df = self.process_names(df)
-            df = self.process_emails(df)
-            df = self.process_dates(df)
-            df = self.process_numeric_columns(df)
-            df = self.reorder_and_rename_columns(df)
-            df = self.fill_missing_values(df)
-            validation_report = self.validate_data(df)
-            
-            self.logger.info("Person data cleaning pipeline completed successfully.")
-            
-            return {
-                'cleaned_data': df,
-                'validation_report': validation_report,
-                'success': True,
-                'message': 'Pipeline completed successfully'
-            }
-            
-        except Exception as e:
-            error_msg = f"Pipeline failed: {str(e)}"
-            self.logger.error(error_msg, exc_info=True) # exc_info provides full traceback
-            return {
-                'cleaned_data': None,
-                'validation_report': None,
-                'success': False,
-                'message': error_msg
-            }
+# --- Run the main function ---
+if __name__ == "__main__":
+    clean_and_transform_data(input_excel_file, output_csv_file)
