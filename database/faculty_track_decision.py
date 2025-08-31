@@ -16,29 +16,26 @@ from models.academic_year_model import AcademicYear
 # Note: AI decisions should not set approved_by/approved_on. HR will set those explicitly.
 
 
-async def _resolve_academic_year_id(session: AsyncSession, provided_id: Optional[int]) -> int:
-	if provided_id:
-		ay = await session.get(AcademicYear, provided_id)
-		if not ay:
-			raise ValueError(f"AcademicYear id={provided_id} not found")
-		return ay.id
+async def _resolve_academic_year_id(session: AsyncSession) -> int:
+	"""Fetch all academic years and select the one with is_current=True.
 
-	# Prefer is_current
-	res = await session.execute(select(AcademicYear).where(AcademicYear.is_current == True))
-	ay = res.scalars().first()
-	if ay:
-		return ay.id
+	If multiple are current, prefer the one with the latest start_date.
+	"""
+	res = await session.execute(select(AcademicYear))
+	years = res.scalars().all()
+	if not years:
+		raise ValueError("No academic years found in database")
 
-	# Fallback to date range containment
-	today = datetime.date.today()
-	res = await session.execute(
-		select(AcademicYear).where(AcademicYear.start_date <= today, AcademicYear.end_date >= today)
-	)
-	ay = res.scalars().first()
-	if ay:
-		return ay.id
+	current_years = [y for y in years if getattr(y, "is_current", False)]
+	if not current_years:
+		raise ValueError("No current academic year found; please set is_current=True on an academic year")
 
-	raise ValueError("No current academic year found; please provide academic_year_id explicitly")
+	if len(current_years) == 1:
+		return current_years[0].id
+
+	# Choose the most recent by start_date if multiple are flagged current
+	chosen = max(current_years, key=lambda y: y.start_date)
+	return chosen.id
 
 
 def _map_decision_to_status(decision: str) -> AssignmentStatus:
@@ -53,18 +50,18 @@ async def save_faculty_track_decision(
 	track_id: int,
 	decision: str,
 	remarks: str,
-	academic_year_id: Optional[int] = None,
+	# academic_year_id is resolved automatically; do not pass it from callers
 	track_level_id: Optional[int] = None,
 ) -> FacultyTrackAssignment:
 	"""Upsert a FacultyTrackAssignment for (faculty_id, academic_year_id) with AI decision.
 
-	- Resolves academic_year_id if not provided.
+	- Resolves academic_year_id by loading all academic years and picking is_current=True.
 	- Maps decision to approved/rejected.
 	- Does NOT set approved_by/approved_on; those are reserved for HR approvals.
 	- Updates existing row or creates a new one.
 	"""
 
-	ay_id = await _resolve_academic_year_id(session, academic_year_id)
+	ay_id = await _resolve_academic_year_id(session)
 	status = _map_decision_to_status(decision)
 	today = datetime.date.today()
 
