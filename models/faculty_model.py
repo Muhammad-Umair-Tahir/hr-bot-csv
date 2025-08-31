@@ -83,10 +83,6 @@ class Faculty(Base):
         foreign_keys="FacultyTrackAssignment.approved_by",
         primaryjoin="Faculty.id == FacultyTrackAssignment.approved_by"
     )
-    recommended_track_assignments: Mapped[list["FacultyTrackAssignment"]] = relationship(
-        foreign_keys="FacultyTrackAssignment.recommended_by",
-        primaryjoin="Faculty.id == FacultyTrackAssignment.recommended_by"
-    )
 
     def __repr__(self) -> str:
         return (
